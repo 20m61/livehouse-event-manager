@@ -1,5 +1,7 @@
 <?php
-if (! defined('WP_UNINSTALL_PLUGIN')) exit;
+if (! defined('WP_UNINSTALL_PLUGIN')) {
+    exit;
+}
 
 // ライブイベント投稿をすべて永続削除
 $events = get_posts(['post_type' => 'live_event', 'numberposts' => -1, 'post_status' => 'any']);
@@ -15,5 +17,7 @@ if (!is_wp_error($terms)) {
     }
 }
 
-// 必要に応じてオプション削除
-// delete_option('wlem_options');
+// 追加: プラグインオプション削除
+if (get_option('wlem_options') !== false) {
+    delete_option('wlem_options');
+}
