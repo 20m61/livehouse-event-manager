@@ -17,14 +17,14 @@ if (! defined('ABSPATH')) {
 function wlem_activate()
 {
     wlem_register_post_type();
-    flush_rewrite_rules();
+    flush_rewrite_rules(false);
 }
 register_activation_hook(__FILE__, 'wlem_activate');
 
 // プラグイン無効化時の処理
 function wlem_deactivate()
 {
-    flush_rewrite_rules();
+    flush_rewrite_rules(false);
 }
 register_deactivation_hook(__FILE__, 'wlem_deactivate');
 
@@ -52,7 +52,7 @@ function wlem_load_textdomain()
 }
 add_action('plugins_loaded', 'wlem_load_textdomain');
 
-// 1. CPT登録関数化
+// 1. CPT登録関数化（REST API 対応）
 function wlem_register_post_type()
 {
     register_post_type('live_event', [
@@ -68,6 +68,7 @@ function wlem_register_post_type()
         ],
         'public'       => true,
         'has_archive'  => true,
+        'show_in_rest' => true,
         'menu_position' => 5,
         'menu_icon'    => 'dashicons-calendar-alt',
         'supports'     => ['title', 'editor', 'thumbnail'],
@@ -75,7 +76,7 @@ function wlem_register_post_type()
 }
 add_action('init', 'wlem_register_post_type');
 
-// カスタムタクソノミー「ジャンル」登録
+// カスタムタクソノミー「ジャンル」登録（REST API 対応）
 add_action('init', function () {
     register_taxonomy('event_genre', 'live_event', [
         'labels' => [
@@ -85,6 +86,7 @@ add_action('init', function () {
         ],
         'public'       => true,
         'hierarchical' => false,
+        'show_in_rest' => true,
     ]);
 });
 
@@ -100,25 +102,28 @@ add_action('add_meta_boxes', function () {
     );
 });
 
-// 3. メタボックス出力コールバック
+// 共通メタフィールド定義
+function wlem_get_meta_fields(): array
+{
+    return [
+        'event_date'     => ['label' => __('開催日', 'wp-livehouse-event-manager'), 'type' => 'date'],
+        'open_time'      => ['label' => __('開場時間', 'wp-livehouse-event-manager'), 'type' => 'time'],
+        'start_time'     => ['label' => __('開演時間', 'wp-livehouse-event-manager'), 'type' => 'time'],
+        'performer'      => ['label' => __('出演者', 'wp-livehouse-event-manager'), 'type' => 'text'],
+        'ticket_price'   => ['label' => __('チケット料金', 'wp-livehouse-event-manager'), 'type' => 'text'],
+        'ticket_url'     => ['label' => __('チケットURL', 'wp-livehouse-event-manager'), 'type' => 'url'],
+        'streaming_info' => ['label' => __('配信情報', 'wp-livehouse-event-manager'), 'type' => 'text'],
+    ];
+}
+
+// メタボックス出力コールバック
 function render_live_event_meta($post)
 {
     wp_nonce_field('save_live_event_meta', 'live_event_nonce');
-    $fields = [
-        'event_date'    => ['label' => __('開催日', 'wp-livehouse-event-manager'), 'type' => 'date'],
-        'open_time'     => ['label' => __('開場時間', 'wp-livehouse-event-manager'), 'type' => 'time'],
-        'start_time'    => ['label' => __('開演時間', 'wp-livehouse-event-manager'), 'type' => 'time'],
-        'performer'     => ['label' => __('出演者', 'wp-livehouse-event-manager'), 'type' => 'text'],
-        'ticket_price'  => ['label' => __('チケット料金', 'wp-livehouse-event-manager'), 'type' => 'text'],
-        'ticket_url'    => ['label' => __('チケットURL', 'wp-livehouse-event-manager'), 'type' => 'url'],
-        'streaming_info' => ['label' => __('配信情報', 'wp-livehouse-event-manager'), 'type' => 'text'],
-        // 'image_url' はアイキャッチ利用のため削除
-    ];
-    foreach ($fields as $key => $cfg) {
+    foreach (wlem_get_meta_fields() as $key => $cfg) {
         $val = get_post_meta($post->ID, $key, true);
-        echo '<p><label for="' . $key . '">' . $cfg['label'] . '</label><br/>';
-        echo '<input type="' . $cfg['type'] . '" id="' . $key . '" name="' . $key
-            . '" value="' . esc_attr($val) . '" style="width:100%;"/></p>';
+        echo "<p><label for='$key'>{$cfg['label']}</label><br/>
+              <input type='{$cfg['type']}' id='$key' name='$key' value='" . esc_attr($val) . "' style='width:100%;'/></p>";
     }
     // ジャンルドロップダウン
     $term_id = wp_get_post_terms($post->ID, 'event_genre', ['fields' => 'ids'])[0] ?? 0;
@@ -133,16 +138,27 @@ function render_live_event_meta($post)
     echo '</p>';
 }
 
-// 4. メタデータ保存処理
-add_action('save_post', function ($post_id) {
-    if (
-        !isset($_POST['live_event_nonce'])
-        || !wp_verify_nonce($_POST['live_event_nonce'], 'save_live_event_meta')
-        || (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)
-        || get_post_type($post_id) !== 'live_event'
-    ) return;
-    $keys = ['event_date', 'open_time', 'start_time', 'performer', 'ticket_price', 'ticket_url', 'streaming_info'];
-    foreach ($keys as $key) {
+// イベント保存処理
+add_action('save_post', 'wlem_save_event', 10, 2);
+function wlem_save_event($post_id, $post)
+{
+    if ($post->post_type !== 'live_event' || (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)) return;
+    if (!isset($_POST['live_event_nonce']) || !wp_verify_nonce($_POST['live_event_nonce'], 'save_live_event_meta')) return;
+
+    // バリデーション
+    foreach (['event_date', 'start_time', 'performer'] as $f) {
+        if (empty($_POST[$f])) {
+            add_filter('redirect_post_location', fn($loc) => add_query_arg('wlem_error', 'missing_' . $f, $loc));
+            return;
+        }
+    }
+    if (!empty($_POST['ticket_url']) && !filter_var($_POST['ticket_url'], FILTER_VALIDATE_URL)) {
+        add_filter('redirect_post_location', fn($loc) => add_query_arg('wlem_error', 'invalid_ticket_url', $loc));
+        return;
+    }
+
+    // メタ保存
+    foreach (array_keys(wlem_get_meta_fields()) as $key) {
         if (isset($_POST[$key])) {
             update_post_meta($post_id, $key, sanitize_text_field(wp_unslash($_POST[$key])));
         }
@@ -150,7 +166,7 @@ add_action('save_post', function ($post_id) {
     if (isset($_POST['event_genre'])) {
         wp_set_object_terms($post_id, intval($_POST['event_genre']), 'event_genre', false);
     }
-});
+}
 
 // 管理一覧カラム追加
 add_filter('manage_live_event_posts_columns', function ($cols) {
@@ -229,27 +245,61 @@ function wlem_live_events_shortcode($atts)
     return $output;
 }
 
-// 6. プラグイン内テンプレートの読み込み
+// 6. プラグイン内テンプレートの読み込み：テーマ上書き対応
 add_filter('template_include', function ($template) {
     if (is_post_type_archive('live_event')) {
-        return plugin_dir_path(__FILE__) . 'templates/archive-live_event.php';
+        $t = locate_template('archive-live_event.php');
+        return $t ?: plugin_dir_path(__FILE__) . 'templates/archive-live_event.php';
     }
     if (is_singular('live_event')) {
-        return plugin_dir_path(__FILE__) . 'templates/single-live_event.php';
+        $t = locate_template('single-live_event.php');
+        return $t ?: plugin_dir_path(__FILE__) . 'templates/single-live_event.php';
     }
     return $template;
 });
 
-// 7. フロント用 CSS/JS 登録
+// 7. フロント用 CSS/JS 登録：バージョンに filemtime を利用
 add_action('wp_enqueue_scripts', function () {
-    wp_enqueue_style('wlem-style', plugin_dir_url(__FILE__) . 'assets/css/style.css');
-    wp_enqueue_script('wlem-filter', plugin_dir_url(__FILE__) . 'assets/js/filter.js', ['jquery'], null, true);
+    $base = plugin_dir_path(__FILE__);
+    wp_enqueue_style(
+        'wlem-style',
+        plugin_dir_url(__FILE__) . 'assets/css/style.css',
+        [],
+        filemtime($base . 'assets/css/style.css')
+    );
+    wp_enqueue_script(
+        'wlem-filter',
+        plugin_dir_url(__FILE__) . 'assets/js/filter.js',
+        ['jquery'],
+        filemtime($base . 'assets/js/filter.js'),
+        true
+    );
     wp_localize_script('wlem-filter', 'WLEM_Ajax', [
         'ajax_url' => admin_url('admin-ajax.php'),
         'nonce'    => wp_create_nonce('wlem_ajax_nonce'),
     ]);
-    wp_enqueue_style('wlem-calendar', plugin_dir_url(__FILE__) . 'assets/css/calendar.css');
-    wp_enqueue_script('wlem-calendar', plugin_dir_url(__FILE__) . 'assets/js/calendar.js', ['jquery'], null, true);
+    wp_enqueue_style(
+        'wlem-calendar',
+        plugin_dir_url(__FILE__) . 'assets/css/calendar.css',
+        [],
+        filemtime($base . 'assets/css/calendar.css')
+    );
+    wp_enqueue_script(
+        'wlem-calendar',
+        plugin_dir_url(__FILE__) . 'assets/js/calendar.js',
+        ['jquery'],
+        filemtime($base . 'assets/js/calendar.js'),
+        true
+    );
+
+    // 共通 AJAX モジュール
+    wp_enqueue_script(
+        'wlem-ajax',
+        plugin_dir_url(__FILE__) . 'assets/js/wlem-ajax.js',
+        ['jquery'],
+        filemtime($base . 'assets/js/wlem-ajax.js'),
+        true
+    );
 });
 
 // 8. AJAX イベントフィルタリング
@@ -282,37 +332,11 @@ function wlem_filter_events()
     wp_send_json_success($data);
 }
 
-// 9. 保存処理にバリデーション追加
-add_action('save_post', 'wlem_save_post_validate', 10, 1);
-function wlem_save_post_validate($post_id)
-{
-    if (
-        !isset($_POST['live_event_nonce'])
-        || !wp_verify_nonce($_POST['live_event_nonce'], 'save_live_event_meta')
-        || (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)
-        || get_post_type($post_id) !== 'live_event'
-    ) return;
-
-    // 必須チェック
-    foreach (['event_date', 'start_time', 'performer'] as $f) {
-        if (empty($_POST[$f])) {
-            add_filter('redirect_post_location', fn($loc) => add_query_arg('wlem_error', 'missing_' . $f, $loc));
-            return;
-        }
-    }
-    // URL形式チェック
-    if (!empty($_POST['ticket_url']) && !filter_var($_POST['ticket_url'], FILTER_VALIDATE_URL)) {
-        add_filter('redirect_post_location', fn($loc) => add_query_arg('wlem_error', 'invalid_ticket_url', $loc));
-        return;
-    }
-    // ...元のメタ保存処理はここで実行されます...
-}
-
-// エラー通知表示
+// エラー通知表示（is_admin チェック追加・KW 削除）
 add_action('admin_notices', function () {
-    if (!isset($_GET['post']) || !isset($_GET['wlem_error'])) return;
+    if (!is_admin() || !isset($_GET['wlem_error']) || !isset($_GET['post'])) return;
     $screen = get_current_screen();
-    if ($screen->post_type !== 'live_event') return;KW
+    if (!$screen || $screen->post_type !== 'live_event') return;
     $msgs = [
         'missing_event_date'   => __('開催日を入力してください。', 'wp-livehouse-event-manager'),
         'missing_start_time'   => __('開演時間を入力してください。', 'wp-livehouse-event-manager'),
@@ -340,6 +364,7 @@ function wlem_event_list_shortcode()
 }
 
 // ショートコード: 月間カレンダー [livehouse_calendar]
+// テーブルを .wlem-calendar-wrap でラップ
 add_shortcode('livehouse_calendar', 'wlem_event_calendar_shortcode');
 function wlem_event_calendar_shortcode()
 {
@@ -350,6 +375,8 @@ function wlem_event_calendar_shortcode()
     $html .= "<span id=\"wlem-cal-month\">{$year}-{$month}</span>";
     $html .= '<button data-action="next">&raquo;</button>';
     $html .= '</div>';
+    $html .= '<div class="wlem-calendar-wrap">';
     $html .= '<table class="wlem-calendar" id="wlem-calendar"></table>';
+    $html .= '</div>';
     return $html;
 }

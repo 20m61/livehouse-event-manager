@@ -16,3 +16,12 @@ Livehouse Event Manager
 == チェンジログ ==
 = 0.1.0 =
 * 初期リリース
+
+== Usage ==
+プラグイン有効化後、以下ファイルが自動で読み込まれます。
+
+- assets/css/style.css
+- assets/css/calendar.css
+- assets/js/filter.js
+- assets/js/calendar.js
+- assets/js/wlem-ajax.js

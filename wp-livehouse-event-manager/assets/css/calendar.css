@@ -6,6 +6,11 @@
     margin-right: 0.5em;
 }
 
+/* テーブルを横スクロール可能にする */
+.wlem-calendar-wrap {
+    overflow-x: auto;
+}
+
 .wlem-calendar {
     width: 100%;
     border-collapse: collapse;

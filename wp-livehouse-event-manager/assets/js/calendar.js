@@ -1,22 +1,26 @@
 jQuery(function ($) {
-    function fetchEvents(month, cb) {
-        $.post(WLEM_Ajax.ajax_url, {
+    function WLEM_fetchEvents(month) {
+        return $.post(WLEM_Ajax.ajax_url, {
             action: 'wlem_filter_events',
             month: month,
             nonce: WLEM_Ajax.nonce
-        }, function (res) {
-            if (res.success) cb(res.data);
         });
     }
 
     // リスト表示制御
     $('#wlem-month-select').on('change', function () {
         var m = $(this).val();
-        fetchEvents(m, function (data) {
-            var html = '';
-            data.forEach(e => html += '<li><a href="' + e.link + '">' + e.title + ' (' + e.date + ')</a></li>');
-            $('#wlem-events-list').html(html);
-        });
+        WLEM_fetchEvents(m)
+            .done(function (data) {
+                var html = '';
+                data.forEach(function (e) {
+                    html += '<li><a href="' + e.link + '">' + e.title + ' (' + e.date + ')</a></li>';
+                });
+                $('#wlem-events-list').html(html);
+            })
+            .fail(function () {
+                $('#wlem-events-list').html('<li><em>取得失敗</em></li>');
+            });
     }).trigger('change');
 
     // カレンダー表示制御
@@ -51,9 +55,21 @@ jQuery(function ($) {
         if (m < 1) { y--; m = 12; } if (m > 12) { y++; m = 1; }
         var next = ('0' + m).slice(-2), nm = y + '-' + next;
         $('#wlem-cal-month').text(nm);
-        fetchEvents(nm, data => renderCalendar(nm, data));
+        WLEM_fetchEvents(nm)
+            .done(function (data) {
+                renderCalendar(nm, data);
+            })
+            .fail(function () {
+                $cal.html('<tr><td colspan="7"><em>カレンダー取得に失敗しました。</em></td></tr>');
+            });
     });
     // 初期表示
     var init = $('#wlem-cal-month').text();
-    fetchEvents(init, data => renderCalendar(init, data));
+    WLEM_fetchEvents(init)
+        .done(function (data) {
+            renderCalendar(init, data);
+        })
+        .fail(function () {
+            $cal.html('<tr><td colspan="7"><em>読み込み失敗</em></td></tr>');
+        });
 });
