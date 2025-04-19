@@ -65,4 +65,4 @@ MIT License
 
 - バージョン: 1.0
 - 最終更新日: 2025 年 4 月 15 日
-- 詳細は「プラグイン要件定義書」を参照
+- 詳細は「プラグイン要件定義書」[docs/plugin-requirements.md](docs/plugin-requirements.md)を参照
