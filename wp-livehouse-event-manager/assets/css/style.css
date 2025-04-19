@@ -1,0 +1,8 @@
+.live-events {
+    list-style: none;
+    padding: 0;
+}
+
+.live-events li {
+    margin-bottom: 0.5em;
+}

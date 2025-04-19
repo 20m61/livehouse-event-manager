@@ -50,6 +50,33 @@
 - カレンダー: `[livehouse_calendar]`
 - リスト: `[livehouse_event_list]`
 
+### ショートコード
+
+- `[livehouse_event_list]`  
+  月間リスト表示。選択セレクトで当月イベントを AJAX 更新。
+
+- `[livehouse_calendar]`  
+  月間カレンダー表示。←/→ ボタンで前後月切り替え、イベントリンク付き。
+
+### アセット
+
+プラグイン有効化後、以下ファイルが自動で読み込まれます。
+
+- assets/css/style.css
+- assets/css/calendar.css
+- assets/js/filter.js
+- assets/js/calendar.js
+
+## テスト
+
+開発環境で以下を実行してください:
+
+```bash
+composer install
+npm install # （必要に応じて）
+composer test
+```
+
 ## Issue の報告・提案
 
 バグ報告や機能要望は、以下のテンプレートを使用して GitHub Issues にて投稿してください:

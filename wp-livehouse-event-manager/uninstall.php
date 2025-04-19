@@ -1,7 +1,19 @@
 <?php
-// アンインストール時の処理
-if (! defined('WP_UNINSTALL_PLUGIN')) {
-    exit;
+if (! defined('WP_UNINSTALL_PLUGIN')) exit;
+
+// ライブイベント投稿をすべて永続削除
+$events = get_posts(['post_type' => 'live_event', 'numberposts' => -1, 'post_status' => 'any']);
+foreach ($events as $e) {
+    wp_delete_post($e->ID, true);
 }
-// ここにデータベースやオプションの削除処理を記述できます
-// 例: delete_option('wlem_options');
+
+// カスタムタクソノミー「event_genre」のターム削除
+$terms = get_terms(['taxonomy' => 'event_genre', 'hide_empty' => false]);
+if (!is_wp_error($terms)) {
+    foreach ($terms as $t) {
+        wp_delete_term($t->term_id, 'event_genre');
+    }
+}
+
+// 必要に応じてオプション削除
+// delete_option('wlem_options');

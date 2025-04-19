@@ -1,0 +1,33 @@
+.wlem-list-wrap {
+    margin-bottom: 1em;
+}
+
+#wlem-month-select {
+    margin-right: 0.5em;
+}
+
+.wlem-calendar {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.wlem-calendar th,
+.wlem-calendar td {
+    border: 1px solid #ddd;
+    padding: 0.5em;
+    vertical-align: top;
+}
+
+.wlem-calendar-nav {
+    text-align: center;
+    margin-bottom: 0.5em;
+}
+
+.wlem-calendar-nav button {
+    margin: 0 0.5em;
+}
+
+.wlem-calendar td strong {
+    display: block;
+    margin-bottom: 0.3em;
+}
