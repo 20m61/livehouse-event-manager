@@ -50,6 +50,13 @@
 - カレンダー: `[livehouse_calendar]`
 - リスト: `[livehouse_event_list]`
 
+## Issue の報告・提案
+
+バグ報告や機能要望は、以下のテンプレートを使用して GitHub Issues にて投稿してください:
+
+- バグ報告: `.github/ISSUE_TEMPLATE/bug_report.md`
+- 機能要望: `.github/ISSUE_TEMPLATE/feature_request.md`
+
 ## ライセンス
 
 MIT License
